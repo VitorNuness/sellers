@@ -3,14 +3,16 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Http\Requests\Auth\AuthRegisterRequest;
+use App\Services\Contracts\UserServiceInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function __construct()
-    {
+    public function __construct(
+        protected UserServiceInterface $service,
+    ) {
         $this->middleware('auth:api', ['except' => ['login', 'register']]);
     }
 
@@ -41,20 +43,11 @@ class AuthController extends Controller
         ]);
     }
 
-    public function register(Request $request)
+    public function register(AuthRegisterRequest $request)
     {
-        $request->validate([
-            'name' => 'required|min:3|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|min:6|confirmed',
-        ]);
-
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-        ]);
-
+        $data = $request->validated();
+        $data["password"] = Hash::make($data["password"]);
+        $user = $this->service->create($data);
         $token = auth()->login($user);
         return response()->json([
             'status' => 'success',
@@ -78,11 +71,16 @@ class AuthController extends Controller
 
     public function refresh()
     {
+        $credentials = [
+            'email' => auth()->user()->name,
+            'password' => auth()->user()->password,
+        ];
+
         return response()->json([
             'status' => 'success',
             'user' => auth()->user(),
             'authorization' => [
-                'token' => auth()->attempt([auth()->user()->name, auth()->user()->password]),
+                'token' => auth()->attempt($credentials),
                 'type' => 'bearer',
             ],
         ]);
